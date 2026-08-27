@@ -1,0 +1,43 @@
+# Ejemplo de configuración del agente (PicoClaw + go-harnessless).
+# Campos según WORKFLOW.md §3 (reciclado) y §4 (manejo de fallos).
+# El agente lee este archivo en runtime; no contiene secretos.
+
+# Perfil persistente reutilizado en cada reciclado (<=10 en Free).
+profileId: "prof_agent01"
+
+# Tope de sesión Free: 15 min. El watchdog debe anticipar el reciclado ANTES.
+sessionTimeoutMin: 15
+
+# Margen de seguridad antes de los 15 min para disparar reciclado sin cortar un paso.
+sessionRecycleMarginSec: 30
+
+# --- Manejo de fallos (WORKFLOW §4) ---
+maxRetries: 5
+backoffBaseSec: 1          # espera = backoffBaseSec * 2^n (backoff exponencial)
+backoffMaxSec: 60
+
+# Circuit-breaker: tras N fallos consecutivos, pausar y liberar sesion.
+circuitBreakerThreshold: 8
+circuitBreakerCooldownSec: 120
+
+# Socket del puente CDP (debe coincidir con HARNESSLESS_SOCK en .env).
+cdpSock: "/tmp/harnessless.sock"
+
+# Endpoint BaaS (v4 primario, v2 fallback documentado en ESPECIFICACIONES §1.2).
+baasBaseUrl: "https://api.browser-use.com"
+baasApiVersionPrimary: "v4"
+baasApiVersionFallback: "v2"
+
+# Logs estructurados JSON (traza de pasos: timestamp, observacion, accion, post-check).
+logFile: "logs/agent.jsonl"
+logLevel: "info"
+
+# --- LLM: cliente compatible con la API de OpenAI (proveedor-agnostico) ---
+# PicoClaw usa openai-go; apunta a cualquier endpoint OpenAI-compatible.
+# Requisito: free tier + multimodal (texto+imagen). Nunca modelo Pro/de pago.
+llm:
+  # URL base OpenAI-compatible. Vacío/omitido => OpenAI por defecto (https://api.openai.com/v1).
+  base_url: ""        # ej. https://generativelanguage.googleapis.com/v1beta/openai/ | https://api.groq.com/openai/v1
+  api_key: ""         # requerido
+  model: ""           # ej. gemini-3-flash
+  max_images: 5       # maximo imagenes por request (0 = sin imagen); default 5

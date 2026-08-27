@@ -1,0 +1,38 @@
+[Unit]
+Description=Agent-Browser-Use-Cloud — agente de automatización web 24/7 ($0/mes)
+Documentation=https://github.com/<tu-org>/Agent-Browser-Use-Cloud
+
+# Arranca tras red; el agente necesita api.browser-use.com y el LLM por API.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# Directorio de trabajo del repo desplegado.
+WorkingDirectory=/opt/agent-browser-use-cloud
+
+# Variables de entorno (BROWSER_USE_API_KEY, PROFILE_ID, LLM_*, etc.).
+# install.sh copia .env a esta ruta. Nunca commitear secretos.
+EnvironmentFile=/opt/agent-browser-use-cloud/.env
+
+# Binario Go estático (PicoClaw = Agent Runtime). Sin Python en prod.
+ExecStart=/usr/local/bin/picoclaw
+
+# Reinicio ante caída (24/7). El agente internamente recicla la sesión cada 15 min.
+Restart=always
+RestartSec=5
+
+# Límites ligeros: el VPS solo orquesta (P4/P5).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/agent-browser-use-cloud/logs /tmp
+
+# Logs al journald (traza de pasos para depurar no determinismo).
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=agent-browser-use-cloud
+
+[Install]
+WantedBy=multi-user.target
