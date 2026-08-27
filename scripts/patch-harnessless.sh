@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# scripts/patch-harnessless.sh — adaptacion remota de go-harnessless (ESPECIFICACIONES §2.1, ~10-20 LOC).
-# Anade soporte a la env HARNESSLESS_CDP_URL: si esta presente, el daemon usa ese wss
-# remoto via NewDaemon(wsURL) en lugar de GetChromeWSURL (Chrome LOCAL).
+# scripts/patch-harnessless.sh — adaptacion remota de go-harnessless (ESPECIFICACIONES §2.1).
+# Anade soporte a la env HARNESSLESS_CDP_URL: si esta presente, RunDaemon usa ese
+# wss/ws remoto via NewDaemon(wsURL) en lugar de GetChromeWSURL (Chrome LOCAL).
+#
+# El parche es un unified diff EXACTO contra daemon.go: se genera en runtime localizando
+# el bloque literal (func RunDaemon / GetChromeWSURL) y aplicandolo con `patch`. NO usa
+# awk que adivina la firma. Es idempotente y reporta exito/error claramente.
 #
 # Uso: patch-harnessless.sh <dir-fuente-go-harnessless>
 set -euo pipefail
@@ -21,33 +25,69 @@ if grep -q "HARNESSLESS_CDP_URL" "$SRC"; then
   exit 0
 fi
 
-# Asegurar import "os" en el archivo.
-if ! grep -q '"os"' "$SRC"; then
-  # insertar "os" junto a la primer import de paquete estandar.
-  awk '!/__PATCHED_IMPORT__/ && /^import \(/ {print; print "\t\"os\""; next} {print}' "$SRC" > "$SRC.tmp" && mv "$SRC.tmp" "$SRC"
+# --- Localizar el bloque exacto a reemplazar (10 lineas: GetChromeWSURL .. cierre de NewDaemon) ---
+START="$(grep -n "^	wsURL, err := GetChromeWSURL()" "$SRC" | head -n1 | cut -d: -f1)"
+[ -n "$START" ] || { echo "[fatal] no se encontro 'wsURL, err := GetChromeWSURL()' en $SRC"; exit 1; }
+END=$((START + 9))   # el bloque es exactamente 10 lineas (verificado en daemon.go de go-harnessless)
+
+# --- Nuevo bloque (reemplazo exacto) ---
+NEW_FILE="$(mktemp)"
+cat > "$NEW_FILE" <<'NEW'
+	// HARNESSLESS_CDP_URL overrides local Chrome discovery with a remote CDP
+	// WebSocket endpoint (e.g. a wss:// tunnel provided by PicoClaw).
+	var d *Daemon
+	var err error
+	if wsURL := os.Getenv("HARNESSLESS_CDP_URL"); wsURL != "" {
+		log.Printf("using remote CDP endpoint from HARNESSLESS_CDP_URL")
+		d, err = NewDaemon(wsURL)
+		if err != nil {
+			return fmt.Errorf("init daemon (remote CDP): %w", err)
+		}
+	} else {
+		wsURL, err := GetChromeWSURL()
+		if err != nil {
+			return fmt.Errorf("locate Chrome: %w", err)
+		}
+		log.Printf("connecting to Chrome at %s", wsURL)
+
+		d, err = NewDaemon(wsURL)
+		if err != nil {
+			return fmt.Errorf("init daemon: %w", err)
+		}
+	}
+NEW
+
+# --- Generar el unified diff a partir de una copia modificada (lineas correctas garantizadas) ---
+MOD="$(mktemp)"
+head -n "$((START - 1))" "$SRC" > "$MOD"
+cat "$NEW_FILE" >> "$MOD"
+tail -n +"$((END + 1))" "$SRC" >> "$MOD"
+
+PATCH="$(mktemp)"
+# diff con etiquetas relativos (a/daemon.go, b/daemon.go) para aplicar con patch -p1.
+diff -u "$SRC" "$MOD" | sed -e "1s|^--- .*|--- a/daemon.go|" -e "2s|^+++ .*|+++ b/daemon.go|" > "$PATCH" || true
+rm -f "$MOD" "$NEW_FILE"
+
+if [ ! -s "$PATCH" ]; then
+  echo "[fatal] el diff generado esta vacio; el bloque objetivo no coincide."
+  rm -f "$PATCH"
+  exit 1
 fi
 
-# Inyectar el override justo despues de la apertura de func RunDaemon.
-# NuevoDaemon(wsURL) ya existe en el repo (soporta cualquier ws/wss).
-MARKER='// [patch] remote CDP adapter (HARNESSLESS_CDP_URL)'
-INJECT=$(cat <<'GO'
+# --- Aplicar el parche ---
+if patch -p1 --no-backup-if-mismatch -d "$HL_DIR" < "$PATCH"; then
+  echo "[ok] parche aplicado: HARNESSLESS_CDP_URL -> NewDaemon(wss/ws remoto)."
+else
+  echo "[fatal] fallo al aplicar el parche. El archivo objetivo no coincide con el diff esperado."
+  rm -f "$PATCH"
+  exit 1
+fi
+rm -f "$PATCH"
 
-	// [patch] remote CDP adapter (HARNESSLESS_CDP_URL)
-	if remote := os.Getenv("HARNESSLESS_CDP_URL"); remote != "" {
-		log.Printf("[harnessless] usando cdpUrl remoto desde HARNESSLESS_CDP_URL")
-		return NewDaemon(remote)
-	}
-GO
-)
-
-awk -v marker="$MARKER" -v inject="$INJECT" '
-  !done && /^func RunDaemon/ {print; getline; print; print inject; done=1; next}
-  {print}
-' "$SRC" > "$SRC.tmp" && mv "$SRC.tmp" "$SRC"
-
-# Verificar que compila (solo chequeo de sintaxis si go disponible).
+# Verificar que compila (solo si go disponible).
 if command -v go >/dev/null 2>&1; then
   ( cd "$HL_DIR" && go build -o /dev/null . ) && echo "[ok] go-harnessless compila tras parche." \
-    || { echo "[warn] build de go-harnessless fallo; revisa el parche manualmente."; }
+    || { echo "[fatal] build de go-harnessless fallo tras el parche; revisa el diff."; exit 1; }
+else
+  echo "[warn] go no disponible en este entorno; no se verifico la compilacion."
 fi
-echo "[ok] parche aplicado: HARNESSLESS_CDP_URL -> NewDaemon(wss remoto)."

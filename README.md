@@ -50,7 +50,7 @@ Agente de automatización web 24/7 a **$0/mes**, desplegado como binario Go est�
    ```bash
    sudo ./scripts/install.sh
    ```
-   `install.sh` es idempotente: instala Go (tarball oficial, no `apt`), clona PicoClaw (commit placeholder **`<PIN_COMMIT_PICOCLAW>` — DEBE FIJARSE**, es `<v1.0`) y go-harnessless, aplica `scripts/patch-harnessless.sh` (adaptación `HARNESSLESS_CDP_URL`), hace build estático (`CGO_ENABLED=0`), instala `picoclaw`/`go-harnessless` a `/usr/local/bin` (o `bin/` local sin root) y recarga systemd. **No instala Python ni nada de pip.**
+   `install.sh` es idempotente: instala Go (tarball oficial, no `apt`), clona PicoClaw (commit **fijado** `bbf6893ca7afad27f1d00a0f5a45982a549c6ed6` en `main`, es `<v1.0`; sobreescribible con la env `PIN_COMMIT_PICOCLAW`) y go-harnessless, aplica `scripts/patch-harnessless.sh` (adaptación `HARNESSLESS_CDP_URL`), hace build estático (`CGO_ENABLED=0`), instala `picoclaw`/`go-harnessless` a `/usr/local/bin` (o `bin/` local sin root) y recarga systemd. **No instala Python ni nada de pip.**
 
 3. **Configurar entorno**
    ```bash

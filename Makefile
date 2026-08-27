@@ -12,10 +12,10 @@ install:
 build:
 	@BUILD_DIR=$(REPO_DIR)/build bash -c '\
 	  export PATH="/usr/local/go/bin:$$PATH"; \
-	  PIN_COMMIT_PICOCLAW="$${PIN_COMMIT_PICOCLAW:-<PIN_COMMIT_PICOCLAW>}"; \
-	  if [ "$$PIN_COMMIT_PICOCLAW" = "<PIN_COMMIT_PICOCLAW>" ]; then \
-	    echo "[fatal] PIN_COMMIT_PICOCLAW NO FIJADO. PicoClaw es <v1.0: define la env PIN_COMMIT_PICOCLAW antes de build."; exit 1; \
-	  fi; \
+	  # Commit fijado de PicoClaw (rama main). PicoClaw es <v1.0 (API inestable): \
+	  # este hash es el pin por defecto, pero puede sobreescribirse con la env \
+	  # PIN_COMMIT_PICOCLAW (p.ej. PIN_COMMIT_PICOCLAW=<otro-hash> make build). \
+	  PIN_COMMIT_PICOCLAW="$${PIN_COMMIT_PICOCLAW:-bbf6893ca7afad27f1d00a0f5a45982a549c6ed6}"; \
 	  git clone --quiet https://github.com/browser-use/go-harnessless $$BUILD_DIR/go-harnessless 2>/dev/null || true; \
 	  if [ -d $$BUILD_DIR/picoclaw/.git ]; then git -C $$BUILD_DIR/picoclaw fetch --quiet; else git clone --quiet https://github.com/sipeed/picoclaw $$BUILD_DIR/picoclaw; fi; \
 	  git -C $$BUILD_DIR/picoclaw checkout --quiet "$$PIN_COMMIT_PICOCLAW"; \

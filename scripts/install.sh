@@ -13,8 +13,10 @@ GO_VERSION="${GO_VERSION:-1.25.0}"
 ARCH="$(uname -m)"; case "$ARCH" in x86_64) GOARCH=amd64;; aarch64|arm64) GOARCH=arm64;; *) GOARCH=amd64;; esac
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 
-# Pin de commit de PicoClaw — DEBE FIJARSE (es <v1.0, API inestable).
-PIN_COMMIT_PICOCLAW="${PIN_COMMIT_PICOCLAW:-<PIN_COMMIT_PICOCLAW>}"
+# Pin de commit de PicoClaw (rama main). PicoClaw es <v1.0 (API inestable):
+# este hash es el pin por defecto, pero puede sobreescribirse con la env
+# PIN_COMMIT_PICOCLAW (p.ej. PIN_COMMIT_PICOCLAW=<otro-hash> ./scripts/install.sh).
+PIN_COMMIT_PICOCLAW="${PIN_COMMIT_PICOCLAW:-bbf6893ca7afad27f1d00a0f5a45982a549c6ed6}"
 PICOCLAW_REPO="https://github.com/sipeed/picoclaw"
 HARNESSLESS_REPO="https://github.com/browser-use/go-harnessless"
 
@@ -45,11 +47,7 @@ clone() {
   local repo="$1" dir="$2" commit="$3"
   if [ -d "$dir/.git" ]; then echo "[*] $dir ya existe, fetch"; git -C "$dir" fetch --quiet; else git clone --quiet "$repo" "$dir"; fi
   if [ -n "${commit:-}" ]; then
-    if [ "$commit" = "<PIN_COMMIT_PICOCLAW>" ]; then
-      echo "[WARN] PIN_COMMIT_PICOCLAW NO FIJADO. PicoClaw es <v1.0: define la env PIN_COMMIT_PICOCLAW antes de producir."
-    else
-      git -C "$dir" checkout --quiet "$commit"
-    fi
+    git -C "$dir" checkout --quiet "$commit"
   fi
 }
 clone "$HARNESSLESS_REPO" "$BUILD_DIR/go-harnessless" ""
